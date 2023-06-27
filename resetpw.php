@@ -1,58 +1,67 @@
-<?php   
-header("Content-Type:application/json");
-if (isset($_GET['userid']) && $_GET['userid'] != '' && isset($_GET['password']) && $_GET['password'] != '' && isset($_GET['newpwd']) && $_GET['newpwd'] != '') 
+<?php
+
+// Set the response header to indicate JSON content
+header("Content-Type: application/json");
+
+// Check if all required parameters are set and not empty
+if (isset($_GET['userid'], $_GET['password'], $_GET['newpwd']) && $_GET['userid'] !== '' && $_GET['password'] !== '' && $_GET['newpwd'] !== '') 
 {
- include('Dbconnect.php');
- $username =  strip_tags($_GET['userid']);
- $password =  strip_tags($_GET['password']);
- $newpwd =  strip_tags($_GET['newpwd']);
+    // Include the database connection file
+    include 'Dbconnect.php';
 
-$username = $DBcon->real_escape_string($username);
-$password = $DBcon->real_escape_string($password);
-$newpwd = $DBcon->real_escape_string($newpwd);
-$hashed_password = password_hash($newpwd, PASSWORD_DEFAULT);
+    // Get the values of the parameters
+    $username = $_GET['userid'];
+    $password = $_GET['password'];
+    $newpwd = $_GET['newpwd'];
 
- $result = mysqli_query($DBcon,"SELECT id, usuario, senha FROM usuarios WHERE id='$username'");
+    // Escape the user input to prevent SQL injection
+    $username = $DBcon->escape_string($username);
+    $password = $DBcon->escape_string($password);
+    $newpwd = $DBcon->escape_string($newpwd);
 
- if(mysqli_num_rows($result)>0)
- {
- $row = mysqli_fetch_array($result);
- $user_id = $row['id'];
- $user = $row['usuario'];
- $senha = $row['senha'];
+    // Hash the new password for security
+    $hashedPassword = password_hash($newpwd, PASSWORD_DEFAULT);
 
-    if (password_verify($password, $senha)) 
+    // Prepare the statement to retrieve user information based on username
+    $stmt = $DBcon->prepare("SELECT id, usuario, senha FROM usuarios WHERE id = ?");
+    $stmt->bind_param('s', $username);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    if ($result->num_rows > 0)
     {
-      //inicio update
-      $query = "UPDATE usuarios SET senha='".$hashed_password."' WHERE id='".$user_id."'";
+        $row = $result->fetch_assoc();
+        $user_id = $row['id'];
+        $user = $row['usuario'];
+        $senha = $row['senha'];
 
-      if ($DBcon->query($query))
+        if (password_verify($password, $senha)) 
         {
-         $msg = "resetpwdok";
-         response($msg);
-         mysqli_close($DBcon);
-      }
-      //fim update
+            // Prepare the statement to update the password
+            $stmt = $DBcon->prepare("UPDATE usuarios SET senha = ? WHERE id = ?");
+            $stmt->bind_param('ss', $hashedPassword, $user_id);
+            if ($stmt->execute())
+            {
+                $msg = "resetpwdok";
+                response($msg);
+                $stmt->close();
+                mysqli_close($DBcon);
+                exit;
+            }
+        } 
     }
-    else
-    {
-      $msg = "error";
+    
+    $msg = "error";
     response($msg);
-    }
- }
- else
- {
-   $msg = "error";
-   response($msg);
- }
-
- }
+    $stmt->close();
+    mysqli_close($DBcon);
+    exit;
+}
  
 function response($msg)
 {
- $response['msg'] = $msg;
- 
- $json_response = json_encode($response);
- echo $json_response;
+    $response['msg'] = $msg;
+    $json_response = json_encode($response);
+    echo $json_response;
 }
 ?>
